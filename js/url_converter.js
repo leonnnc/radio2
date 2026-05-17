@@ -35,8 +35,9 @@ async function checkLocalServer() {
 }
 
 function initUrlConverter() {
-  const input = document.getElementById('conv-url-input');
-  const btn   = document.getElementById('conv-url-btn');
+  const input    = document.getElementById('conv-url-input');
+  const btnAudio = document.getElementById('conv-url-btn-audio');
+  const btnVideo = document.getElementById('conv-url-btn-video');
 
   input?.addEventListener('input', () => {
     const p     = detectPlatform(input.value.trim());
@@ -48,8 +49,9 @@ function initUrlConverter() {
     }
   });
 
-  btn?.addEventListener('click', extractFromUrl);
-  input?.addEventListener('keydown', e => { if (e.key === 'Enter') extractFromUrl(); });
+  btnAudio?.addEventListener('click', () => extractFromUrl('audio'));
+  btnVideo?.addEventListener('click', () => extractFromUrl('video'));
+  input?.addEventListener('keydown', e => { if (e.key === 'Enter') extractFromUrl('audio'); });
   // NO llamar checkServerStatus() aquí — se llama al abrir la pestaña URL
 }
 
@@ -87,10 +89,11 @@ function setUrlStatus(state, html) {
   body.innerHTML = map[state] || map.idle;
 }
 
-async function extractFromUrl() {
+async function extractFromUrl(type = 'audio') {
   const input    = document.getElementById('conv-url-input');
   const nameEl   = document.getElementById('conv-url-name');
-  const btn      = document.getElementById('conv-url-btn');
+  const btnAudio = document.getElementById('conv-url-btn-audio');
+  const btnVideo = document.getElementById('conv-url-btn-video');
   const url      = input?.value.trim();
 
   if (!url) { Toast.show('Pega un enlace primero', 'error'); return; }
@@ -101,7 +104,8 @@ async function extractFromUrl() {
     return;
   }
 
-  btn.disabled = true;
+  if (btnAudio) btnAudio.disabled = true;
+  if (btnVideo) btnVideo.disabled = true;
   const resultCard = document.getElementById('url-result-card');
   if (resultCard) resultCard.style.display = 'none';
 
@@ -120,7 +124,8 @@ async function extractFromUrl() {
         Déjalo corriendo y vuelve a intentarlo.
       </span>
     `);
-    btn.disabled = false;
+    if (btnAudio) btnAudio.disabled = false;
+    if (btnVideo) btnVideo.disabled = false;
     return;
   }
 
@@ -147,13 +152,15 @@ async function extractFromUrl() {
     }
   } catch { /* continuar sin metadata */ }
 
-  const filename = (title || platform.name.toLowerCase() + '-audio') + '.mp3';
+  const ext = type === 'audio' ? '.mp3' : '.mp4';
+  const filename = (title || platform.name.toLowerCase() + '-' + type) + ext;
 
-  // 3. Descargar audio
-  setUrlStatus('processing', `${platform.icon} Descargando audio de ${platform.name}… (puede tardar 20-60 segundos)`);
+  // 3. Descargar media
+  setUrlStatus('processing', `${platform.icon} Descargando ${type} de ${platform.name}… (puede tardar de 30 a 90 segundos)`);
 
   try {
-    const dlRes = await fetch(`${LOCAL_SERVER}/download`, {
+    const endpoint = type === 'audio' ? '/download' : '/download-video';
+    const dlRes = await fetch(`${LOCAL_SERVER}${endpoint}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url }),
@@ -180,28 +187,35 @@ async function extractFromUrl() {
       : (err.message || 'Error desconocido');
 
     setUrlStatus('error', `Error al descargar: <em>${msg}</em>`);
-    Toast.show('Error al descargar el audio', 'error');
+    Toast.show(`Error al descargar el ${type}`, 'error');
   } finally {
-    btn.disabled = false;
+    if (btnAudio) btnAudio.disabled = false;
+    if (btnVideo) btnVideo.disabled = false;
   }
 }
 
-function showUrlResult(audioUrl, filename, platform, size) {
+function showUrlResult(mediaUrl, filename, platform, size, type = 'audio') {
   const card = document.getElementById('url-result-card');
   const body = document.getElementById('url-result-body');
   if (!card || !body) return;
   card.style.display = 'block';
 
+  const isAudio = type === 'audio';
+  const mediaElement = isAudio 
+    ? `<audio controls style="width:100%;margin-bottom:14px;accent-color:var(--accent-cyan)" src="${mediaUrl}"></audio>`
+    : `<video controls style="width:100%;max-height:300px;background:#000;border-radius:var(--radius-sm);margin-bottom:14px" src="${mediaUrl}"></video>`;
+
   body.innerHTML = `
-    <audio controls style="width:100%;margin-bottom:14px;accent-color:var(--accent-cyan)" src="${audioUrl}"></audio>
+    ${mediaElement}
     <div style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:12px">
-      📦 ${formatFileSize(size)} · MP3 · ${platform.icon} ${platform.name}
+      📦 ${formatFileSize(size)} · ${isAudio ? 'MP3' : 'MP4'} · ${platform.icon} ${platform.name}
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap">
-      <a href="${audioUrl}" download="${filename}" class="btn btn-primary" style="flex:1;justify-content:center">
+      <a href="${mediaUrl}" download="${filename}" class="btn btn-primary" style="flex:1;justify-content:center">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        Descargar MP3
+        Descargar ${isAudio ? 'MP3' : 'MP4'}
       </a>
+      ${isAudio ? `
       <button class="btn btn-secondary" id="url-to-player" style="flex:1">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
         Escuchar en Player
@@ -209,32 +223,35 @@ function showUrlResult(audioUrl, filename, platform, size) {
       <button class="btn btn-secondary" id="url-to-podcast" style="flex:1">
         🎙️ Añadir a Podcasts
       </button>
+      ` : ''}
     </div>
   `;
 
-  document.getElementById('url-to-player')?.addEventListener('click', () => {
-    Player.play(
-      { name: filename.replace('.mp3',''), emoji: platform.icon, genre: platform.name, status: 'podcast', listeners: 0 },
-      audioUrl
-    );
-    Toast.show(`▶ Reproduciendo desde ${platform.name}`, 'info');
-  });
-
-  document.getElementById('url-to-podcast')?.addEventListener('click', () => {
-    const id = Date.now();
-    EpisodeAudioMap.set(id, audioUrl);
-    RadioFM.data.podcasts.unshift({
-      id, stationId: null,
-      title: filename.replace('.mp3',''),
-      duration: '?:??', plays: 0,
-      date: new Date().toISOString().slice(0,10),
-      emoji: platform.icon, status: 'draft',
-      description: `Descargado de ${platform.name}`, streamUrl: '',
+  if (isAudio) {
+    document.getElementById('url-to-player')?.addEventListener('click', () => {
+      Player.play(
+        { name: filename.replace('.mp3',''), emoji: platform.icon, genre: platform.name, status: 'podcast', listeners: 0 },
+        mediaUrl
+      );
+      Toast.show(`▶ Reproduciendo desde ${platform.name}`, 'info');
     });
-    RadioFM.save();
-    Toast.show(`"${filename.replace('.mp3','')}" añadido a Podcasts`, 'success');
-    Router.navigate('podcasts');
-  });
+
+    document.getElementById('url-to-podcast')?.addEventListener('click', () => {
+      const id = Date.now();
+      EpisodeAudioMap.set(id, mediaUrl);
+      RadioFM.data.podcasts.unshift({
+        id, stationId: null,
+        title: filename.replace('.mp3',''),
+        duration: '?:??', plays: 0,
+        date: new Date().toISOString().slice(0,10),
+        emoji: platform.icon, status: 'draft',
+        description: `Descargado de ${platform.name}`, streamUrl: '',
+      });
+      RadioFM.save();
+      Toast.show(`"${filename.replace('.mp3','')}" añadido a Podcasts`, 'success');
+      Router.navigate('podcasts');
+    });
+  }
 }
 
 function formatFileSize(bytes) {

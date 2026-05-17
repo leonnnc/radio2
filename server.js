@@ -69,6 +69,7 @@ function downloadAudio(videoUrl, res) {
     '--audio-format', 'mp3',
     '--audio-quality', '192K',
     '--ffmpeg-location', path.dirname(FFMPEG),
+    '--client', 'ANDROID',
     '--no-warnings',
     '--quiet',
     '-o', outPath,
@@ -117,6 +118,68 @@ function downloadAudio(videoUrl, res) {
       res.end(JSON.stringify({ error: 'Timeout: el video tardó demasiado en descargarse' }));
     }
   }, 180_000);
+
+  proc.on('close', () => clearTimeout(timeout));
+}
+
+// Descarga el video completo y lo sirve como stream
+function downloadVideo(videoUrl, res) {
+  const id     = Date.now().toString(36);
+  const outPath = path.join(TMP_DIR, `radiofm_vid_${id}.mp4`);
+
+  const args = [
+    '--no-playlist',
+    '--format', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+    '--merge-output-format', 'mp4',
+    '--ffmpeg-location', path.dirname(FFMPEG),
+    '--client', 'ANDROID',
+    '--no-warnings',
+    '--quiet',
+    '-o', outPath,
+    videoUrl,
+  ];
+
+  console.log(`[RadioFM] Descargando Video: ${videoUrl}`);
+
+  res.setHeader('Access-Control-Allow-Origin', '*');
+
+  const proc = spawn(YTDLP, args);
+  let stderr = '';
+
+  proc.stderr.on('data', d => { stderr += d.toString(); });
+
+  proc.on('close', code => {
+    if (code !== 0 || !fs.existsSync(outPath)) {
+      console.error('[RadioFM] yt-dlp video error:', stderr);
+      if (!res.headersSent) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: stderr.trim() || 'yt-dlp falló' }));
+      }
+      return;
+    }
+
+    const stat = fs.statSync(outPath);
+    res.writeHead(200, {
+      'Content-Type':        'video/mp4',
+      'Content-Length':       stat.size,
+      'Content-Disposition': `attachment; filename="video_${id}.mp4"`,
+      'Access-Control-Allow-Origin': '*',
+    });
+
+    const stream = fs.createReadStream(outPath);
+    stream.pipe(res);
+    stream.on('end', () => {
+      try { fs.unlinkSync(outPath); } catch {}
+    });
+  });
+
+  const timeout = setTimeout(() => {
+    proc.kill();
+    if (!res.headersSent) {
+      res.writeHead(504, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Timeout: el video tardó demasiado' }));
+    }
+  }, 300_000); // 5 min para video
 
   proc.on('close', () => clearTimeout(timeout));
 }
@@ -187,6 +250,23 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // POST /download-video  — descarga video MP4
+  if (req.method === 'POST' && url.pathname === '/download-video') {
+    let body = '';
+    req.on('data', c => { body += c; });
+    req.on('end', () => {
+      try {
+        const { url: videoUrl } = JSON.parse(body);
+        if (!videoUrl) throw new Error('Falta el campo "url"');
+        downloadVideo(videoUrl, res);
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return;
+  }
+
   // POST /info  — metadata del video
   if (req.method === 'POST' && url.pathname === '/info') {
     let body = '';
@@ -217,9 +297,10 @@ const server = http.createServer((req, res) => {
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`\n✅ RadioFM Audio Server corriendo en http://0.0.0.0:${PORT}`);
-  console.log(`   POST /download  { "url": "https://youtube.com/..." }  → MP3`);
-  console.log(`   POST /info      { "url": "..." }  → metadata`);
-  console.log(`   GET  /health    → estado\n`);
+  console.log(`   POST /download         { "url": "..." }  → MP3`);
+  console.log(`   POST /download-video   { "url": "..." }  → MP4`);
+  console.log(`   POST /info             { "url": "..." }  → metadata`);
+  console.log(`   GET  /health           → estado\n`);
 });
 
 process.on('SIGINT',  () => { console.log('\nServidor detenido.'); process.exit(0); });

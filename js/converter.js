@@ -178,10 +178,16 @@ function renderConverter(container) {
             <label class="form-label">Nombre del archivo de salida</label>
             <input class="form-control" id="conv-url-name" placeholder="mi-audio" />
           </div>
-          <button class="btn btn-primary" style="width:100%" id="conv-url-btn">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Extraer Audio
-          </button>
+          <div style="display:flex;gap:10px">
+            <button class="btn btn-primary" style="flex:1" id="conv-url-btn-audio">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Extraer Audio
+            </button>
+            <button class="btn btn-secondary" style="flex:1" id="conv-url-btn-video">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+              Extraer Video MP4
+            </button>
+          </div>
         </div>
       </div>
         <div class="card" id="url-status-card">
