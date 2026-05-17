@@ -7,7 +7,7 @@
 // Si estás en producción, cambia esta URL a la de tu servidor (ej. Render)
 const LOCAL_SERVER = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
   ? 'http://localhost:7979' 
-  : 'https://TU-URL-DE-RENDER-AQUI.onrender.com'; // <-- REEMPLAZAR CUANDO TENGAS EL LINK
+  : 'https://radio2-zqaq.onrender.com';
 
 const URL_PLATFORMS = [
   { id:'youtube',    re:/youtube\.com|youtu\.be/,   icon:'▶️', name:'YouTube'    },
