@@ -4,10 +4,8 @@
    para descargar audio de YouTube, Facebook, etc.
    ============================================ */
 
-// Si estás en producción, cambia esta URL a la de tu servidor (ej. Render)
-const LOCAL_SERVER = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
-  ? 'http://localhost:7979' 
-  : 'https://radio2-zqaq.onrender.com';
+// Forzar el uso del servidor en la nube para probar si Render funciona correctamente
+const LOCAL_SERVER = 'https://radio2-zqaq.onrender.com';
 
 const URL_PLATFORMS = [
   { id:'youtube',    re:/youtube\.com|youtu\.be/,   icon:'▶️', name:'YouTube'    },
@@ -176,8 +174,8 @@ async function extractFromUrl(type = 'audio') {
     const blob    = await dlRes.blob();
     const blobUrl = URL.createObjectURL(blob);
 
-    setUrlStatus('done', `¡Audio descargado! ${platform.icon} ${platform.name} · ${formatFileSize(blob.size)}`);
-    showUrlResult(blobUrl, filename, platform, blob.size);
+    setUrlStatus('done', `¡${type === 'audio' ? 'Audio' : 'Video'} descargado! ${platform.icon} ${platform.name} · ${formatFileSize(blob.size)}`);
+    showUrlResult(blobUrl, filename, platform, blob.size, type);
     Toast.show(`✓ "${filename}" listo`, 'success');
 
   } catch (err) {
