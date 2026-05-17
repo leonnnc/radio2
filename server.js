@@ -215,8 +215,8 @@ const server = http.createServer((req, res) => {
   res.end(JSON.stringify({ error: 'Ruta no encontrada' }));
 });
 
-server.listen(PORT, '127.0.0.1', () => {
-  console.log(`\n✅ RadioFM Audio Server corriendo en http://localhost:${PORT}`);
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`\n✅ RadioFM Audio Server corriendo en http://0.0.0.0:${PORT}`);
   console.log(`   POST /download  { "url": "https://youtube.com/..." }  → MP3`);
   console.log(`   POST /info      { "url": "..." }  → metadata`);
   console.log(`   GET  /health    → estado\n`);
