@@ -63,6 +63,7 @@ function downloadAudio(videoUrl, res) {
   const id     = Date.now().toString(36);
   const outPath = path.join(TMP_DIR, `radiofm_${id}.mp3`);
 
+  const cookiePath = path.join(__dirname, 'cookies.txt');
   const args = [
     '--no-playlist',
     '--extract-audio',
@@ -72,6 +73,7 @@ function downloadAudio(videoUrl, res) {
     '--extractor-args', 'youtube:player_client=android',
     '--no-warnings',
     '--quiet',
+    ...(fs.existsSync(cookiePath) ? ['--cookies', cookiePath] : []),
     '-o', outPath,
     videoUrl,
   ];
@@ -127,6 +129,7 @@ function downloadVideo(videoUrl, res) {
   const id     = Date.now().toString(36);
   const outPath = path.join(TMP_DIR, `radiofm_vid_${id}.mp4`);
 
+  const cookiePath = path.join(__dirname, 'cookies.txt');
   const args = [
     '--no-playlist',
     '--format', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
@@ -135,6 +138,7 @@ function downloadVideo(videoUrl, res) {
     '--extractor-args', 'youtube:player_client=android',
     '--no-warnings',
     '--quiet',
+    ...(fs.existsSync(cookiePath) ? ['--cookies', cookiePath] : []),
     '-o', outPath,
     videoUrl,
   ];
@@ -187,9 +191,13 @@ function downloadVideo(videoUrl, res) {
 // Obtiene info del video sin descargarlo
 function getVideoInfo(videoUrl, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  const proc = spawn(YTDLP, [
-    '--no-playlist', '--dump-json', '--quiet', '--no-warnings', videoUrl,
-  ]);
+  const cookiePath = path.join(__dirname, 'cookies.txt');
+  const args = [
+    '--no-playlist', '--dump-json', '--quiet', '--no-warnings',
+    ...(fs.existsSync(cookiePath) ? ['--cookies', cookiePath] : []),
+    videoUrl
+  ];
+  const proc = spawn(YTDLP, args);
 
   let stdout = '';
   let stderr = '';
