@@ -2,6 +2,8 @@
    RADIOFM — STATIONS PAGE
    ============================================ */
 
+let editingStationId = null;
+
 function renderStations(container) {
   container.innerHTML = `
     <div class="page-header">
@@ -38,8 +40,18 @@ function renderStations(container) {
           <input class="form-control" id="stn-url" placeholder="https://stream.ejemplo.com/radio" />
         </div>
         <div class="form-group">
-          <label class="form-label">Emoji / Ícono</label>
+          <label class="form-label">Emoji / Ícono (Si no usas imagen)</label>
           <input class="form-control" id="stn-emoji" placeholder="🎵" maxlength="2" value="📻" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Imagen de Portada (Opcional)</label>
+          <div style="display:flex;gap:10px;align-items:center">
+            <div id="stn-img-preview" style="width:48px;height:48px;border-radius:var(--radius-sm);background:var(--bg-tertiary);display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0">
+              <span style="color:var(--text-muted);font-size:0.8rem">Sin Img</span>
+            </div>
+            <input type="file" id="stn-img-upload" accept="image/*" class="form-control" style="flex:1" />
+            <input type="hidden" id="stn-img-b64" />
+          </div>
         </div>
         <div class="form-group">
           <label class="form-label">Descripción</label>
@@ -109,27 +121,103 @@ function renderStationsGrid() {
       Router.navigate('autodj', parseInt(btn.dataset.id));
     });
   });
+
+  grid.querySelectorAll('.station-edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = parseInt(btn.dataset.id);
+      const s = RadioFM.data.stations.find(st => st.id === id);
+      if (s) {
+        editingStationId = id;
+        document.getElementById('stn-name').value = s.name || '';
+        document.getElementById('stn-genre').value = s.genre || 'Otro';
+        document.getElementById('stn-url').value = s.streamUrl || '';
+        document.getElementById('stn-emoji').value = s.emoji || '📻';
+        document.getElementById('stn-desc').value = s.description || '';
+        
+        const preview = document.getElementById('stn-img-preview');
+        if (s.image) {
+          document.getElementById('stn-img-b64').value = s.image;
+          preview.innerHTML = `<img src="${s.image}" style="width:100%;height:100%;object-fit:cover" />`;
+        } else {
+          document.getElementById('stn-img-b64').value = '';
+          preview.innerHTML = `<span style="color:var(--text-muted);font-size:0.8rem">Sin Img</span>`;
+        }
+        document.getElementById('stn-img-upload').value = '';
+
+        document.querySelector('.modal-title').textContent = 'Editar Estación';
+        document.getElementById('save-station-btn').textContent = 'Guardar Cambios';
+        Modal.open('modal-new-station');
+      }
+    });
+  });
 }
 
 function bindStationsEvents() {
-  document.getElementById('btn-new-station')?.addEventListener('click', () => Modal.open('modal-new-station'));
+  document.getElementById('btn-new-station')?.addEventListener('click', () => {
+    editingStationId = null;
+    document.getElementById('stn-name').value = '';
+    document.getElementById('stn-genre').value = 'Pop / Hits';
+    document.getElementById('stn-url').value = '';
+    document.getElementById('stn-emoji').value = '📻';
+    document.getElementById('stn-desc').value = '';
+    document.getElementById('stn-img-b64').value = '';
+    document.getElementById('stn-img-upload').value = '';
+    document.getElementById('stn-img-preview').innerHTML = `<span style="color:var(--text-muted);font-size:0.8rem">Sin Img</span>`;
+    
+    document.querySelector('.modal-title').textContent = 'Nueva Estación';
+    document.getElementById('save-station-btn').textContent = 'Crear Estación';
+    Modal.open('modal-new-station');
+  });
+
   document.getElementById('close-station-modal')?.addEventListener('click', () => Modal.close('modal-new-station'));
   document.getElementById('cancel-station-modal')?.addEventListener('click', () => Modal.close('modal-new-station'));
+
+  document.getElementById('stn-img-upload')?.addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_SIZE = 300;
+        let w = img.width, h = img.height;
+        if (w > h && w > MAX_SIZE) { h *= MAX_SIZE / w; w = MAX_SIZE; }
+        else if (h > MAX_SIZE) { w *= MAX_SIZE / h; h = MAX_SIZE; }
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+        document.getElementById('stn-img-b64').value = dataUrl;
+        document.getElementById('stn-img-preview').innerHTML = `<img src="${dataUrl}" style="width:100%;height:100%;object-fit:cover" />`;
+      };
+      img.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
 
   document.getElementById('save-station-btn')?.addEventListener('click', () => {
     const name = document.getElementById('stn-name')?.value.trim();
     if (!name) { Toast.show('El nombre es obligatorio', 'error'); return; }
-    const station = {
+    const stationData = {
       name,
       genre: document.getElementById('stn-genre')?.value || 'Otro',
       streamUrl: document.getElementById('stn-url')?.value.trim() || '',
       emoji: document.getElementById('stn-emoji')?.value.trim() || '📻',
       description: document.getElementById('stn-desc')?.value.trim() || '',
+      image: document.getElementById('stn-img-b64')?.value || null,
       color: '#00d4ff',
     };
-    RadioFM.addStation(station);
+
+    if (editingStationId) {
+      RadioFM.updateStation(editingStationId, stationData);
+      Toast.show(`"${name}" actualizada`, 'success');
+    } else {
+      RadioFM.addStation(stationData);
+      Toast.show(`"${name}" creada exitosamente`, 'success');
+    }
+
     Modal.close('modal-new-station');
-    Toast.show(`"${name}" creada exitosamente`, 'success');
     renderStationsGrid();
   });
 }

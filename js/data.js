@@ -96,6 +96,17 @@ const RadioFM = {
     return station;
   },
 
+  updateStation(id, newData) {
+    const idx = this.data.stations.findIndex(s => s.id === id);
+    if (idx !== -1) {
+      this.data.stations[idx] = { ...this.data.stations[idx], ...newData };
+      this.refreshGenreStats();
+      this.save();
+      return this.data.stations[idx];
+    }
+    return null;
+  },
+
   removeStation(id) {
     this.data.stations = this.data.stations.filter(s => s.id !== id);
     this.refreshGenreStats();

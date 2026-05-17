@@ -413,11 +413,15 @@ function renderRecentPodcasts() {
 // ---- SHARED CARD TEMPLATES ----
 function stationCardHTML(s) {
   const isLive = s.status === 'live';
+  const coverBg = s.image 
+    ? `background:url(${s.image}) center/cover no-repeat` 
+    : `background:linear-gradient(135deg,${s.color}22,${s.color}44)`;
+
   return `
     <div class="station-card hover-lift">
       <div class="station-cover">
-        <div class="station-cover-art" style="background:linear-gradient(135deg,${s.color}22,${s.color}44)">
-          <span style="font-size:3rem">${s.emoji}</span>
+        <div class="station-cover-art" style="${coverBg}">
+          ${s.image ? '' : `<span style="font-size:3rem">${s.emoji}</span>`}
         </div>
         <div class="station-cover-overlay"></div>
         ${isLive ? `<div class="station-cover-badge"><span class="badge badge-live">LIVE</span></div>` : ''}
