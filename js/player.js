@@ -69,7 +69,13 @@ const Player = (() => {
     const title = el.title();
     const sub   = el.subtitle();
 
-    if (art)   art.textContent = station.emoji || '📻';
+    if (art) {
+      if (station.image) {
+        art.innerHTML = `<img src="${station.image}" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)">`;
+      } else {
+        art.textContent = station.emoji || '📻';
+      }
+    }
     if (title) title.textContent = station.name;
     if (sub) {
       const isLive = station.status === 'live';
