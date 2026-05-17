@@ -15,8 +15,8 @@ COPY package.json ./
 # Instalar dependencias de Node.js (si hubiera alguna futura)
 RUN npm install --only=production
 
-# Copiar el servidor
-COPY server.js .
+# Copiar el servidor y las cookies
+COPY server.js cookies.txt ./
 
 # Exponer el puerto
 EXPOSE 7979
