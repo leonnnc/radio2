@@ -64,13 +64,21 @@ async function renderAutoDJ(container, stationId) {
       </div>
     </div>
 
-    <!-- Banner info -->
-    <div style="background:linear-gradient(135deg,rgba(0,212,255,0.08),rgba(124,58,237,0.08));border:1px solid rgba(0,212,255,0.15);border-radius:var(--radius-lg);padding:14px 18px;margin-bottom:22px;display:flex;align-items:center;gap:12px">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent-cyan)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-      <span style="font-size:0.875rem;color:var(--text-secondary)">
-        <strong style="color:var(--text-primary)">Formatos soportados: MP3 y WAV.</strong>
-        El Auto DJ transmite tu playlist cuando no estás en vivo. Usa un solo tipo de archivo para evitar problemas.
-      </span>
+    <div class="card" style="margin-bottom:22px;padding:20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:20px">
+      <div style="flex:1;min-width:300px">
+        <h3 style="font-size:1rem;margin-bottom:6px">📻 Enlace de Transmisión Pública</h3>
+        <p style="font-size:0.875rem;color:var(--text-muted)">Comparte este enlace para que tus oyentes sintonicen la radio desde cualquier reproductor web o móvil.</p>
+        ${!station.streamUrl ? `<p style="font-size:0.75rem;color:var(--accent-orange);margin-top:6px">⚠️ Esta es una URL de prueba generada automáticamente. Para una URL real, edita la estación e ingresa tu enlace de Icecast/Zeno.fm.</p>` : ''}
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;background:var(--bg-tertiary);padding:8px 12px;border-radius:var(--radius-md);border:1px solid rgba(255,255,255,0.05);flex:1;max-width:500px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent-cyan)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+        <code style="font-family:monospace;font-size:0.875rem;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1">
+          ${station.streamUrl ? station.streamUrl : `https://radio2-zqaq.onrender.com/stream/${station.id}`}
+        </code>
+        <button class="btn btn-ghost btn-sm btn-icon" id="autodj-copy-url" data-url="${station.streamUrl ? station.streamUrl : `https://radio2-zqaq.onrender.com/stream/${station.id}`}" title="Copiar URL">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </button>
+      </div>
     </div>
 
     <div class="grid-2" style="gap:24px">
@@ -273,6 +281,16 @@ function initAutoDJ(stationId) {
     if (!state?.audio?.duration) return;
     const rect = e.currentTarget.getBoundingClientRect();
     state.audio.currentTime = ((e.clientX - rect.left) / rect.width) * state.audio.duration;
+  });
+
+  // Botón de copiar URL
+  document.getElementById('autodj-copy-url')?.addEventListener('click', e => {
+    const btn = e.currentTarget;
+    navigator.clipboard.writeText(btn.dataset.url).then(() => {
+      Toast.show('URL copiada al portapapeles', 'success');
+    }).catch(() => {
+      Toast.show('No se pudo copiar la URL', 'error');
+    });
   });
 
   // Restaurar estado del player si había uno activo
