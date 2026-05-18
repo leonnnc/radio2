@@ -10,10 +10,46 @@ const AutoDJPlaylists = new Map();
 
 // Estado del reproductor Auto DJ por estación
 const AutoDJState = new Map(); // stationId → { playing, currentIdx, audio }
+const AutoDJLoaded = new Set(); // stationId → booleano
 
-function renderAutoDJ(container, stationId) {
+async function loadAutoDJPlaylist(stationId) {
+  try {
+    const saved = localStorage.getItem('autodj_meta_' + stationId);
+    if (!saved) return;
+    const metaList = JSON.parse(saved);
+    const pl = [];
+    for (const meta of metaList) {
+      const blob = await localforage.getItem('dj_blob_' + meta.id);
+      if (blob) {
+        pl.push({
+          ...meta,
+          url: URL.createObjectURL(blob)
+        });
+      }
+    }
+    AutoDJPlaylists.set(stationId, pl);
+  } catch (err) {
+    console.error('[AutoDJ] Error loading playlist:', err);
+  }
+}
+
+function saveAutoDJPlaylist(stationId) {
+  const pl = AutoDJPlaylists.get(stationId) || [];
+  const metaList = pl.map(t => ({
+    id: t.id, name: t.name, duration: t.duration, size: t.size, type: t.type
+  }));
+  localStorage.setItem('autodj_meta_' + stationId, JSON.stringify(metaList));
+}
+
+async function renderAutoDJ(container, stationId) {
   const station = RadioFM.data.stations.find(s => s.id === stationId);
   if (!station) return;
+
+  if (!AutoDJLoaded.has(stationId)) {
+    container.innerHTML = `<div class="page-header"><h1>Cargando Auto DJ...</h1><div class="spinner" style="margin-top:10px"></div></div>`;
+    await loadAutoDJPlaylist(stationId);
+    AutoDJLoaded.add(stationId);
+  }
 
   const playlist = AutoDJPlaylists.get(stationId) || [];
 
@@ -194,9 +230,12 @@ function initAutoDJ(stationId) {
   });
 
   // Botones de playlist
-  document.getElementById('autodj-clear-all')?.addEventListener('click', () => {
+  document.getElementById('autodj-clear-all')?.addEventListener('click', async () => {
     if (confirm('¿Limpiar toda la playlist?')) {
+      const pl = AutoDJPlaylists.get(stationId) || [];
+      for (const t of pl) await localforage.removeItem('dj_blob_' + t.id);
       AutoDJPlaylists.set(stationId, []);
+      saveAutoDJPlaylist(stationId);
       stopDJ(stationId);
       renderAutoDJ(document.getElementById('page-content'), stationId);
     }
@@ -207,10 +246,12 @@ function initAutoDJ(stationId) {
     btn.addEventListener('click', () => playDJTrack(stationId, parseInt(btn.dataset.index)));
   });
   document.querySelectorAll('.autodj-remove-track').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       const id  = parseInt(btn.dataset.id);
       const pl  = AutoDJPlaylists.get(stationId) || [];
+      await localforage.removeItem('dj_blob_' + id);
       AutoDJPlaylists.set(stationId, pl.filter(t => t.id !== id));
+      saveAutoDJPlaylist(stationId);
       renderAutoDJ(document.getElementById('page-content'), stationId);
     });
   });
@@ -258,8 +299,11 @@ async function handleDJUpload(files, stationId) {
     const blobUrl  = URL.createObjectURL(file);
     const duration = await getAudioDuration(blobUrl);
 
+    const trackId = Date.now() + i;
+    await localforage.setItem('dj_blob_' + trackId, file);
+
     pl.push({
-      id:       Date.now() + i,
+      id:       trackId,
       name:     file.name.replace(/\.[^.]+$/, ''),
       url:      blobUrl,
       duration: formatDJTime(duration),
@@ -275,6 +319,7 @@ async function handleDJUpload(files, stationId) {
   if (progressLabel) progressLabel.textContent = `¡${files.length} pista(s) lista(s)!`;
 
   AutoDJPlaylists.set(stationId, pl);
+  saveAutoDJPlaylist(stationId);
 
   setTimeout(() => {
     renderAutoDJ(document.getElementById('page-content'), stationId);
