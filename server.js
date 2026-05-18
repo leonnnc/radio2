@@ -299,6 +299,38 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // GET /stream/:id (Mock UI)
+  if (req.method === 'GET' && url.pathname.startsWith('/stream/')) {
+    const stationId = url.pathname.replace('/stream/', '').replace('station-', '');
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    res.end(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>RadioFM Stream</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+          body { background: #0f0f1a; color: white; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; padding: 20px; }
+          .disc { width: 120px; height: 120px; border-radius: 50%; background: linear-gradient(135deg, #00d4ff, #7c3aed); animation: spin 4s linear infinite; margin-bottom: 24px; border: 8px solid #1a1a2e; box-shadow: 0 0 40px rgba(0,212,255,0.2); }
+          @keyframes spin { 100% { transform: rotate(360deg); } }
+          h1 { margin: 0 0 10px 0; font-size: 28px; }
+          p { color: #8b9cc4; max-width: 500px; line-height: 1.6; font-size: 16px; margin: 0 0 16px 0; }
+          .badge { background: rgba(239,68,68,0.2); color: #ef4444; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: bold; letter-spacing: 1px; margin-bottom: 20px; display: inline-block; }
+        </style>
+      </head>
+      <body>
+        <div class="disc"></div>
+        <div class="badge">MODO SIMULACIÓN</div>
+        <h1>Transmisión de RadioFM</h1>
+        <p><strong>Estación ID:</strong> ${stationId}</p>
+        <p>Esta es una URL de demostración generada por el panel de <strong>RadioFM</strong>.</p>
+        <p>La estación está actualmente operando en modo <strong>Auto DJ Local</strong> (el audio se genera y reproduce dentro del navegador del administrador). Para que el público escuche la transmisión aquí, el administrador debe enlazar un servidor real de Icecast/Shoutcast en la configuración.</p>
+      </body>
+      </html>
+    `);
+    return;
+  }
+
   res.writeHead(404, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ error: 'Ruta no encontrada' }));
 });
