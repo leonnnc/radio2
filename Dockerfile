@@ -1,7 +1,7 @@
 FROM node:18-alpine
 
 # Instalar ffmpeg y python/pip (requerido para yt-dlp)
-RUN apk update && apk add --no-cache ffmpeg python3 py3-pip
+RUN apk update && apk add --no-cache ffmpeg python3 py3-pip icecast
 
 # Instalar yt-dlp (Alpine moderno requiere break-system-packages para pip global)
 RUN pip3 install yt-dlp --break-system-packages
@@ -16,7 +16,7 @@ COPY package.json ./
 RUN npm install --only=production
 
 # Copiar el servidor y las cookies
-COPY server.js cookies.txt ./
+COPY server.js cookies.txt icecast.xml ./
 
 # Exponer el puerto
 EXPOSE 7979

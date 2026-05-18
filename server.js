@@ -47,6 +47,61 @@ const FFMPEG = findFfmpeg();
 console.log(`[RadioFM] yt-dlp: ${YTDLP}`);
 console.log(`[RadioFM] ffmpeg: ${FFMPEG}`);
 
+// INICIAR ICECAST
+try {
+  const icecastProc = spawn('icecast', ['-c', path.join(__dirname, 'icecast.xml')]);
+  icecastProc.stdout.on('data', d => console.log(`[Icecast] ${d.toString().trim()}`));
+  icecastProc.stderr.on('data', d => console.log(`[Icecast] ${d.toString().trim()}`));
+  console.log(`[RadioFM] Servidor Icecast local iniciado en el puerto 8000.`);
+} catch (e) {
+  console.error('[RadioFM] No se pudo iniciar Icecast:', e);
+}
+
+// ESTADOS DEL AUTODJ (FFMPEG)
+const AutoDJProcesses = new Map();
+
+function restartAutoDJ(stationId) {
+  const destDir = path.join(TMP_DIR, `autodj_${stationId}`);
+  if (AutoDJProcesses.has(stationId)) {
+    AutoDJProcesses.get(stationId).kill();
+    AutoDJProcesses.delete(stationId);
+  }
+
+  if (!fs.existsSync(destDir)) return;
+  const files = fs.readdirSync(destDir).filter(f => f.endsWith('.mp3') || f.endsWith('.wav'));
+  if (files.length === 0) return;
+
+  const playlistPath = path.join(destDir, 'playlist.txt');
+  let playlistContent = '';
+  for (const f of files) {
+    // safe escape for ffmpeg concat
+    playlistContent += `file '${path.join(destDir, f).replace(/'/g, "'\\''")}'\n`;
+  }
+  fs.writeFileSync(playlistPath, playlistContent);
+
+  console.log(`[RadioFM] Iniciando streaming FFmpeg para la estación ${stationId} a Icecast...`);
+  
+  const args = [
+    '-re', 
+    '-f', 'concat', 
+    '-safe', '0', 
+    '-stream_loop', '-1', 
+    '-i', playlistPath, 
+    '-c:a', 'libmp3lame', 
+    '-b:a', '128k', 
+    '-content_type', 'audio/mpeg', 
+    '-f', 'mp3', 
+    `icecast://source:radiofm_hackme@127.0.0.1:8000/${stationId}`
+  ];
+
+  const proc = spawn(FFMPEG, args);
+  AutoDJProcesses.set(stationId, proc);
+
+  proc.on('close', () => {
+    console.log(`[RadioFM] AutoDJ FFmpeg detenido para ${stationId}`);
+  });
+}
+
 // Limpia archivos temporales viejos
 function cleanTemp(prefix) {
   try {
@@ -299,35 +354,121 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // GET /stream/:id (Mock UI)
+  // POST /autodj/upload - Sube un archivo MP3 raw
+  if (req.method === 'POST' && url.pathname === '/autodj/upload') {
+    const stationId = url.searchParams.get('stationId');
+    const filename  = url.searchParams.get('filename');
+    if (!stationId || !filename) {
+      res.writeHead(400); res.end('Faltan parametros'); return;
+    }
+    const dest = path.join(TMP_DIR, `autodj_${stationId}`);
+    fs.mkdirSync(dest, { recursive: true });
+    
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    const ws = fs.createWriteStream(path.join(dest, filename));
+    req.pipe(ws);
+    req.on('end', () => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'ok' }));
+      restartAutoDJ(stationId);
+    });
+    return;
+  }
+
+  // POST /autodj/delete - Elimina un archivo
+  if (req.method === 'POST' && url.pathname === '/autodj/delete') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', () => {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      try {
+        const { stationId, filename } = JSON.parse(body);
+        const file = path.join(TMP_DIR, `autodj_${stationId}`, filename);
+        if (fs.existsSync(file)) fs.unlinkSync(file);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'ok' }));
+        restartAutoDJ(stationId);
+      } catch (e) {
+        res.writeHead(500); res.end('error');
+      }
+    });
+    return;
+  }
+
+  // POST /autodj/clear - Elimina toda la playlist
+  if (req.method === 'POST' && url.pathname === '/autodj/clear') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', () => {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      try {
+        const { stationId } = JSON.parse(body);
+        const dir = path.join(TMP_DIR, `autodj_${stationId}`);
+        if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
+        if (AutoDJProcesses.has(stationId)) {
+          AutoDJProcesses.get(stationId).kill();
+          AutoDJProcesses.delete(stationId);
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'ok' }));
+      } catch (e) {
+        res.writeHead(500); res.end('error');
+      }
+    });
+    return;
+  }
+
+  // GET /stream/:id (Proxy hacia Icecast)
   if (req.method === 'GET' && url.pathname.startsWith('/stream/')) {
     const stationId = url.pathname.replace('/stream/', '').replace('station-', '');
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>RadioFM Stream</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <style>
-          body { background: #0f0f1a; color: white; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; padding: 20px; }
-          .disc { width: 120px; height: 120px; border-radius: 50%; background: linear-gradient(135deg, #00d4ff, #7c3aed); animation: spin 4s linear infinite; margin-bottom: 24px; border: 8px solid #1a1a2e; box-shadow: 0 0 40px rgba(0,212,255,0.2); }
-          @keyframes spin { 100% { transform: rotate(360deg); } }
-          h1 { margin: 0 0 10px 0; font-size: 28px; }
-          p { color: #8b9cc4; max-width: 500px; line-height: 1.6; font-size: 16px; margin: 0 0 16px 0; }
-          .badge { background: rgba(239,68,68,0.2); color: #ef4444; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: bold; letter-spacing: 1px; margin-bottom: 20px; display: inline-block; }
-        </style>
-      </head>
-      <body>
-        <div class="disc"></div>
-        <div class="badge">MODO SIMULACIÓN</div>
-        <h1>Transmisión de RadioFM</h1>
-        <p><strong>Estación ID:</strong> ${stationId}</p>
-        <p>Esta es una URL de demostración generada por el panel de <strong>RadioFM</strong>.</p>
-        <p>La estación está actualmente operando en modo <strong>Auto DJ Local</strong> (el audio se genera y reproduce dentro del navegador del administrador). Para que el público escuche la transmisión aquí, el administrador debe enlazar un servidor real de Icecast/Shoutcast en la configuración.</p>
-      </body>
-      </html>
-    `);
+    
+    // Proxy crudo hacia Icecast (http://127.0.0.1:8000/stationId)
+    const proxyReq = http.request({
+      hostname: '127.0.0.1',
+      port: 8000,
+      path: `/${stationId}`,
+      method: 'GET',
+      headers: req.headers
+    }, (proxyRes) => {
+      // Si Icecast devuelve 404, significa que no hay transmisión activa.
+      if (proxyRes.statusCode === 404) {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(`
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>RadioFM Stream - Offline</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>
+              body { background: #0f0f1a; color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; padding: 20px; }
+              .disc { width: 120px; height: 120px; border-radius: 50%; background: #1a1a2e; margin-bottom: 24px; border: 8px solid #2a2a3e; }
+              h1 { margin: 0 0 10px 0; font-size: 28px; }
+              p { color: #8b9cc4; max-width: 500px; line-height: 1.6; }
+              .badge { background: rgba(239,68,68,0.2); color: #ef4444; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: bold; margin-bottom: 20px; display: inline-block; }
+            </style>
+          </head>
+          <body>
+            <div class="disc"></div>
+            <div class="badge">OFFLINE</div>
+            <h1>Transmisión Apagada</h1>
+            <p>La estación <strong>${stationId}</strong> no está transmitiendo audio en este momento.</p>
+            <p>El administrador debe activar el Auto DJ o configurar el servidor.</p>
+          </body>
+          </html>
+        `);
+        return;
+      }
+      
+      // Si Icecast tiene el stream, copiamos los headers y el contenido
+      res.writeHead(proxyRes.statusCode, proxyRes.headers);
+      proxyRes.pipe(res, { end: true });
+    });
+
+    proxyReq.on('error', (e) => {
+      res.writeHead(500); res.end('Icecast no esta corriendo.');
+    });
+
+    req.pipe(proxyReq, { end: true });
     return;
   }
 
